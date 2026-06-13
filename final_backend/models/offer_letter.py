@@ -1,4 +1,5 @@
 
+ 
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -8,7 +9,9 @@ class OfferLetter(Base):
     __tablename__ = "offer_letters"
     __table_args__ = {'extend_existing': True}
 
-    id              = Column(Integer, primary_key=True, index=True)
+    # ── Primary Key: emp_id from Employee (no autoincrement) ─────────────────
+    emp_id          = Column(String(20), ForeignKey("employees.emp_id"), primary_key=True, nullable=False)
+    employee        = relationship("Employee", foreign_keys=[emp_id])
 
     # ── Created by (logged in user) ──────────────────────────────────────────
     created_by      = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -20,7 +23,6 @@ class OfferLetter(Base):
 
     # ── Employee Info ────────────────────────────────────────────────────────
     full_name       = Column(String(150), nullable=False)
-    # candidate_name  = Column(String(150), nullable=True)
     designation     = Column(String(150), nullable=True)
     department      = Column(String(150), nullable=True)
     manager         = Column(String(150), nullable=True)

@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
+
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { BG_PAGES } from '../assets/bg_images'
+import { openPaySlipPDF } from '../components/PaySlipPDFViewer'
 
 // ─── Number Helpers ────────────────────────────────────────────────────────
 const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"]
@@ -32,9 +33,11 @@ export default function PaySlip_SoftGrid() {
   const [salaryMode, setSalaryMode] = useState('auto') // 'auto' | 'custom'
   const [aiLoading,  setAiLoading]  = useState(false)
   const [aiError,    setAiError]    = useState('')
-  const [saveLoading, setSaveLoading] = useState(false)
-  const [saveSuccess, setSaveSuccess] = useState('')
-  const [saveError,   setSaveError]   = useState('')
+  const [saveLoading,      setSaveLoading]     = useState(false)
+  const [saveSuccess,      setSaveSuccess]     = useState('')
+  const [saveError,        setSaveError]       = useState('')
+  const [empLookupLoading, setEmpLookupLoading] = useState(false)
+  const [empLookupError,   setEmpLookupError]   = useState('')
 
   const [form, setForm] = useState({
     month: 'May', year: '2026',
@@ -43,7 +46,7 @@ export default function PaySlip_SoftGrid() {
     bankName: '', accountNo: '',
     attendFrom: '', attendTo: '',
     paidDays: '21', workingDays: '21', lop: '0.00', pl: '',
-    annualGross: '',
+    monthlyGross: '',
     pfEmp: true, esiOn: false, pfRate: 12,
     loanRecovery: '', otherDeduction: '', tdsAmt: '',
     // custom salary fields
@@ -55,9 +58,69 @@ export default function PaySlip_SoftGrid() {
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
+  // ─── Employee Lookup ──────────────────────────────────────────────────────
+  const fetchEmployeeById = async (empId) => {
+    if (!empId.trim()) return
+    setEmpLookupLoading(true)
+    setEmpLookupError('')
+    try {
+      const token = localStorage.getItem('hr_token')
+
+      // ── 1. Employee fetch ──
+      const res = await fetch(`${API_URL}/employees/${empId.trim()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        if (res.status === 404) throw new Error(`Employee ID "${empId}" not found`)
+        throw new Error('Lookup failed')
+      }
+      const emp = await res.json()
+
+      // ── 2. Offer Letter fetch — monthly_gross ──
+      let latestMonthlyGross = ''
+      try {
+        const olRes = await fetch(`${API_URL}/offer-letters/`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (olRes.ok) {
+          const letters = await olRes.json()
+          const empLetters = Array.isArray(letters)
+            ? letters.filter(l => l.emp_id === empId.trim())
+            : []
+          if (empLetters.length > 0) {
+            const latest = empLetters.reduce((a, b) => (b.id > a.id ? b : a))
+            if (latest.monthly_gross) {
+              latestMonthlyGross = String(Math.round(latest.monthly_gross))
+            }
+          }
+        }
+      } catch {
+        // offer letter fetch fail — ignore
+      }
+
+      setForm(prev => ({
+        ...prev,
+        empName:      emp.full_name    || prev.empName,
+        designation:  emp.designation  || prev.designation,
+        department:   emp.department   || prev.department,
+        uanNumber:    emp.uan_number   || prev.uanNumber,
+        pfNumber:     emp.pf_number    || prev.pfNumber,
+        panNumber:    emp.pan          || prev.panNumber,
+        adharNumber:  emp.aadhar       || prev.adharNumber,
+        bankName:     emp.bank_name    || prev.bankName,
+        accountNo:    emp.bank_acc     || prev.accountNo,
+        monthlyGross: latestMonthlyGross || prev.monthlyGross,
+      }))
+    } catch (err) {
+      setEmpLookupError(`⚠️ ${err.message}`)
+    } finally {
+      setEmpLookupLoading(false)
+    }
+  }
+
   // ─── Salary Calculations ──────────────────────────────────────────────────
-  const annual        = parseFloat(form.annualGross) || 0
-  const monthly       = Math.round(annual / 12)
+  const monthly       = parseFloat(form.monthlyGross) || 0
+  const annual        = monthly * 12
   const esiApplicable = monthly <= 21000
 
   const autoBasic   = Math.round(monthly * 0.40)
@@ -104,8 +167,8 @@ export default function PaySlip_SoftGrid() {
 
   // ─── AI Salary Suggestion ────────────────────────────────────────────────
   const suggestSalaryWithAI = async () => {
-    if (!form.annualGross || parseFloat(form.annualGross) <= 0) {
-      setAiError('आधी Annual Gross टाका'); return
+    if (!form.monthlyGross || parseFloat(form.monthlyGross) <= 0) {
+      setAiError('Please enter Annual Gross first'); return
     }
     setAiLoading(true); setAiError('')
     try {
@@ -117,12 +180,12 @@ export default function PaySlip_SoftGrid() {
           max_tokens: 1000,
           messages: [{
             role: 'user',
-            content: `You are an Indian payroll expert. Given Annual Gross of ₹${form.annualGross}, suggest a realistic monthly salary breakdown.
+            content: `You are an Indian payroll expert. Given Monthly Gross of ₹${form.monthlyGross}, suggest a realistic monthly salary breakdown.
 Designation: ${form.designation || 'Software Developer'}
 Department: ${form.department || 'IT'}
 Return ONLY valid JSON, no markdown:
 {"basic":<number>,"da":<number>,"hra":<number>,"conv":<number>,"med":<number>,"special":<number>}
-All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)/12)}.`
+All values monthly INR integers. Sum = ${Math.round(parseFloat(form.monthlyGross))}.`
           }]
         })
       })
@@ -139,13 +202,13 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
         customSpecial: String(parsed.special || ''),
       }))
       setSalaryMode('custom')
-    } catch { setAiError('AI suggestion failed. पुन्हा try करा.') }
+    } catch { setAiError('AI suggestion failed. Please try again.') }
     finally   { setAiLoading(false) }
   }
 
   // ─── Save to Backend ──────────────────────────────────────────────────────
   const saveToDB = async () => {
-    if (!form.empName) { setSaveError('⚠️ Employee चं नाव भरा!'); return }
+    if (!form.empName) { setSaveError('⚠️ Please enter Employee Name!'); return }
     setSaveLoading(true); setSaveError(''); setSaveSuccess('')
     try {
       const token = localStorage.getItem('hr_token')
@@ -170,7 +233,7 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
           working_days:  parseFloat(form.workingDays) || 0,
           lop:           parseFloat(form.lop)         || 0,
           pl:            form.pl,
-          annual_gross:  annual,
+          annual_gross:  monthly * 12,
           monthly_gross: customMonthlyGross,
           basic, da, hra,
           conveyance:    conv,
@@ -189,163 +252,49 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Save failed') }
       const data = await res.json()
-      setSaveSuccess(`✅ Pay Slip save झाला! ID: #${data.id}`)
+      setSaveSuccess(`✅ Pay Slip saved successfully! ID: #${data.id}`)
+      return true
     } catch (err) {
       setSaveError(`⚠️ ${err.message}`)
+      return false
     } finally {
       setSaveLoading(false)
     }
   }
 
-  // ─── PDF Export (OfferLetter style — position:relative page, absolute header/footer) ──
-  const exportPDF = useCallback(() => {
-    const bg = BG_PAGES?.[0] || ''
 
-    // ── Same pgStyle as OfferLetter ──
-    const pgStyle = `
-      position:relative;
-      width:210mm;
-      min-height:297mm;
-      margin:0 auto;
-      padding:48mm 18mm 22mm 18mm;
-      font-family:'Segoe UI',Arial,sans-serif;
-      font-size:13px;
-      color:#1a2e1a;
-      background-image:url('${bg}');
-      background-size:100% 100%;
-      background-repeat:no-repeat;
-      background-position:center center;
-      -webkit-print-color-adjust:exact;
-      print-color-adjust:exact;
-    `
-
-    // ── Absolute header overlay (top-right) — same as OfferLetter ──
-    const headerInfo = `
-      <div style="position:absolute;top:10mm;right:8mm;text-align:right;font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1b5e20;line-height:1.9">
-        <div style="font-weight:800;font-size:16px;color:#1b5e20;letter-spacing:0.3px">SOFTGRID INFO PVT. LTD.</div>
-        <div><strong>GSTIN:</strong> ${CO.gstin}</div>
-        <div><strong>TAN:</strong> ${CO.tan}</div>
-      </div>`
-
-    // ── Absolute footer overlay (bottom) — same as OfferLetter ──
-    const footerHTML = `
-      <div style="position:absolute;bottom:6mm;left:18mm;right:8mm;border-top:1px solid #999;padding-top:4px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#000;font-family:'Segoe UI',Arial,sans-serif">
-        <span>${CO.addressFooter}</span>
-        <span>${CO.website} | ${CO.email}</span>
-      </div>`
-
-    // ── Salary table rows ──
-    const maxR = Math.max(earnRows.length, dedRows.length)
-    const tableRowsHTML = Array.from({ length: maxR }, (_, i) => {
-      const e = earnRows[i]
-      const d = dedRows[i]
-      return `<tr>
-        <td style="padding:13px 10px;border:1px solid #a5d6a7;font-size:12.5px">${e ? e.label : ''}</td>
-        <td style="padding:13px 10px;border:1px solid #a5d6a7;text-align:right;font-size:12.5px">${e ? fmtNum(e.val) : ''}</td>
-        <td style="padding:13px 10px;border:1px solid #a5d6a7;font-size:12.5px">${d ? d.label : ''}</td>
-        <td style="padding:13px 10px;border:1px solid #a5d6a7;text-align:right;font-size:12.5px">${d ? fmtNum(d.val) : ''}</td>
-      </tr>`
-    }).join('')
-
-    const pw = window.open('', '_blank')
-    pw.document.write(`<!DOCTYPE html><html><head>
-<meta charset="UTF-8">
-<title>Pay Slip — ${form.empName || 'Employee'} — ${form.month} ${form.year}</title>
-<style>
-  * { box-sizing:border-box;margin:0;padding:0 }
-  body { font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#333;background:#f5f5f5 }
-  @page { size:A4;margin:0 }
-  @media print {
-    html,body{width:210mm;margin:0;background:white}
-    .no-print{display:none!important}
-    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  }
-  h1 { text-align:center;font-size:17px;font-weight:700;text-decoration:underline;margin:0 0 14px }
-  .meta { display:grid;grid-template-columns:1fr 1fr;gap:6px 0;font-size:12.5px;padding:8px 0;margin-bottom:10px }
-  .meta-row { display:flex;gap:4px;line-height:1.9 }
-  .meta-row strong { min-width:115px;color:#333 }
-  .att-bar { font-size:12px;padding:5px 0;margin-bottom:12px;color:#444 }
-  table { width:100%;border-collapse:collapse;font-size:12.5px }
-  th { background:#2e7d32;color:#fff;padding:9px 10px;font-size:12.5px;letter-spacing:.04em;font-weight:700 }
-  th:nth-child(even) { text-align:right }
-  .total-row td { background:#e8f5e9;font-weight:700;padding:9px 10px;border:1px solid #c8e6c9;font-size:12.5px;color:#1b4332 }
-  .total-row td:nth-child(even) { text-align:right }
-  .net-row td { background:#c8e6c9;font-weight:700;padding:9px 10px;font-size:13px;color:#1b5e20 }
-  .net-row td:last-child { text-align:right }
-  .words { margin-top:12px;font-size:12.5px;line-height:1.8 }
-  #pbar { position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#1e293b,#0f172a);border-top:2px solid #6366f1;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;z-index:9999;font-family:'Segoe UI',sans-serif }
-</style></head><body>
-
-<div style="${pgStyle}">
-  ${headerInfo}
-
-  <h1>Pay Slip</h1>
-
-  <div class="meta">
-    <div class="meta-row"><strong>Month:</strong> ${form.month}-${form.year}</div>
-    <div class="meta-row"><strong>UAN Number:</strong> ${form.uanNumber || '—'}</div>
-    <div class="meta-row"><strong>EMP ID:</strong> ${form.empId || '—'}</div>
-    <div class="meta-row"><strong>PF Number:</strong> ${form.pfNumber || '—'}</div>
-    <div class="meta-row"><strong>Name:</strong> ${form.empName || '—'}</div>
-    <div class="meta-row"><strong>PAN Number:</strong> ${form.panNumber || '—'}</div>
-    <div class="meta-row"><strong>Designation:</strong> ${form.designation || '—'}</div>
-    <div class="meta-row"><strong>Adhar Number:</strong> ${form.adharNumber || '—'}</div>
-    <div class="meta-row"><strong>Department:</strong> ${form.department || '—'}</div>
-    <div class="meta-row"><strong>Bank Name:</strong> ${form.bankName || '—'}</div>
-    <div class="meta-row"></div>
-    <div class="meta-row"><strong>Account No:</strong> ${form.accountNo || '—'}</div>
-  </div>
-
-  <div class="att-bar">
-    Paid Day's: <strong>${form.paidDays}</strong> &nbsp;&nbsp;
-    Working Day's: <strong>${form.workingDays}</strong> &nbsp;&nbsp;&nbsp;&nbsp;
-    LOP: <strong>${form.lop}</strong> &nbsp;&nbsp;
-    PL: <strong>${form.pl || '—'}</strong>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left;width:30%">Components In Salary</th>
-        <th style="width:20%">Gross Amount</th>
-        <th style="text-align:left;width:30%">Deductions &amp; Recoveries</th>
-        <th style="width:20%">Gross Deductions</th>
-      </tr>
-    </thead>
-    <tbody>${tableRowsHTML}</tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td><strong>Total Gross Salary</strong></td>
-        <td style="text-align:right"><strong>${fmtNum(customMonthlyGross)}</strong></td>
-        <td>N/A</td>
-        <td style="text-align:right"><strong>${fmtNum(totalDed)}</strong></td>
-      </tr>
-      <tr class="net-row">
-        <td colspan="2"><strong>Net Salary</strong></td>
-        <td>N/A</td>
-        <td style="text-align:right"><strong>${fmtNum(netSalary)}</strong></td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <div class="words"><strong>Total Amount in Words: ${toWords(netSalary)} Only</strong></div>
-
-  ${footerHTML}
-</div>
-
-<div id="pbar" class="no-print">
-  <div>
-    <div style="color:#fff;font-size:14px;font-weight:600;margin-bottom:3px">✅ Pay Slip तयार आहे!</div>
-    <div style="color:#64748b;font-size:12px">👇 <strong style="color:#a5b4fc">"Save as PDF"</strong> click करा → Destination: <strong style="color:#a5b4fc">"Save as PDF"</strong></div>
-  </div>
-  <div style="display:flex;gap:10px">
-    <button onclick="document.getElementById('pbar').style.display='none';window.print()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:11px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(99,102,241,0.5)">⬇️ Save as PDF</button>
-    <button onclick="window.close()" style="background:rgba(255,255,255,0.06);color:#64748b;border:1px solid rgba(255,255,255,0.1);padding:11px 16px;border-radius:10px;font-size:13px;cursor:pointer">✕</button>
-  </div>
-</div>
-</body></html>`)
-    pw.document.close()
-  }, [form, monthly, customMonthlyGross, basic, da, hra, conv, med, special, pfEmpM, esiEmpM, pt, loan, otherDed, tds, totalDed, netSalary, earnRows, dedRows])
+  // ─── form state → PaySlipPDFViewer compatible ps object ─────────────────
+  const formToPayslip = (f, calc) => ({
+    emp_id:          f.empId,
+    emp_name:        f.empName,
+    designation:     f.designation,
+    department:      f.department,
+    uan_number:      f.uanNumber,
+    pf_number:       f.pfNumber,
+    pan_number:      f.panNumber,
+    adhar_number:    f.adharNumber,
+    bank_name:       f.bankName,
+    account_no:      f.accountNo,
+    month:           f.month,
+    year:            f.year,
+    working_days:    f.workingDays,
+    lop:             f.lop,
+    pl:              f.pl,
+    basic:           calc.basic,
+    da:              calc.da,
+    hra:             calc.hra,
+    conveyance:      calc.conv,
+    medical:         calc.med,
+    special:         calc.special,
+    pf_employee:     calc.pfEmpM,
+    esi_employee:    calc.esiEmpM,
+    prof_tax:        calc.pt,
+    loan_recovery:   calc.loan,
+    other_deduction: calc.otherDed,
+    tds:             calc.tds,
+    monthly_gross:   calc.customMonthlyGross,
+    net_salary:      calc.netSalary,
+  })
 
   const inp = "w-full mt-1 px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-indigo-500 outline-none text-white text-sm transition-colors"
   const lbl = "text-sm text-gray-300"
@@ -381,14 +330,35 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
           <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-xl">
             <h2 className="text-base font-semibold text-indigo-400 mb-5">👤 Employee Information</h2>
             <div className="space-y-4">
+              <div>
+                <label className={lbl}>EMP ID <span className="text-gray-500 text-xs">(Enter ID → auto-fill)</span></label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    name="empId"
+                    value={form.empId}
+                    onChange={handleChange}
+                    onKeyDown={e => e.key === 'Enter' && fetchEmployeeById(form.empId)}
+                    placeholder="e.g. SG264527"
+                    className={inp + " flex-1"}
+                  />
+                  <button
+                    onClick={() => fetchEmployeeById(form.empId)}
+                    disabled={empLookupLoading || !form.empId.trim()}
+                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center gap-2"
+                  >
+                    {empLookupLoading
+                      ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                      : '🔍'}
+                    {empLookupLoading ? 'Fetching...' : 'Fetch'}
+                  </button>
+                </div>
+                {empLookupError && <div className="mt-1 text-red-400 text-xs">{empLookupError}</div>}
+              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className={lbl}>EMP ID</label><input name="empId" value={form.empId} onChange={handleChange} placeholder="e.g. 18" className={inp} /></div>
                 <div><label className={lbl}>Full Name</label><input name="empName" value={form.empName} onChange={handleChange} placeholder="e.g. Takale Pappu Rajendra" className={inp} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div><label className={lbl}>Designation</label><input name="designation" value={form.designation} onChange={handleChange} placeholder="e.g. Software Developer" className={inp} /></div>
-                <div><label className={lbl}>Department</label><input name="department" value={form.department} onChange={handleChange} placeholder="e.g. IT" className={inp} /></div>
               </div>
+              <div><label className={lbl}>Department</label><input name="department" value={form.department} onChange={handleChange} placeholder="e.g. IT" className={inp} /></div>
             </div>
           </div>
 
@@ -448,14 +418,17 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
             {/* AUTO MODE */}
             {salaryMode === 'auto' && (
               <div>
-                <label className={lbl}>Annual Gross (₹)</label>
-                <input type="number" name="annualGross" value={form.annualGross} onChange={handleChange} placeholder="e.g. 249996" className={inp + " text-amber-400 font-bold"} />
-                <p className="text-xs text-gray-500 mt-1.5 mb-3">Basic 40% · DA 50% of Basic · HRA 40% of Basic · Conv ₹1600 · Med ₹1250 · Balance → Special</p>
+                <label className={lbl}>Monthly Gross (₹)</label>
+                <input type="number" name="monthlyGross" value={form.monthlyGross} onChange={handleChange} placeholder="e.g. 39500" className={inp + " text-amber-400 font-bold"} />
+                {monthly > 0 && (
+                  <p className="text-xs text-emerald-400 mt-1">📅 Annual: ₹ {(monthly * 12).toLocaleString('en-IN')} / year</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1 mb-3">Basic 40% · DA 50% of Basic · HRA 40% of Basic · Conv ₹1600 · Med ₹1250 · Balance → Special</p>
                 <button onClick={suggestSalaryWithAI} disabled={aiLoading}
                   className="w-full py-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-semibold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2">
                   {aiLoading
                     ? <><span className="animate-spin inline-block">⟳</span> AI Calculating...</>
-                    : <>✨ AI ने Salary Breakdown Suggest करा</>}
+                    : <>✨ AI Salary Breakdown Suggestion</>}
                 </button>
                 {aiError && <p className="text-rose-400 text-xs mt-2">{aiError}</p>}
               </div>
@@ -465,7 +438,7 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
             {salaryMode === 'custom' && (
               <div className="space-y-3 mb-4">
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-2 text-xs text-amber-400 mb-3">
-                  ✏️ प्रत्येक component manually enter करा — automatic calculation होणार नाही
+                  ✏️ Enter each component manually — automatic calculation will not apply
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {[
@@ -589,7 +562,7 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
           {/* Save + Generate */}
           <div className="pb-8">
             <button
-              onClick={async () => { await saveToDB(); exportPDF() }}
+              onClick={async () => { const ok = await saveToDB(); if (ok) openPaySlipPDF(formToPayslip(form, { basic, da, hra, conv, med, special, pfEmpM, esiEmpM, pt, loan, otherDed, tds, customMonthlyGross, netSalary })) }}
               disabled={saveLoading}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 font-semibold hover:scale-105 active:scale-95 transition text-white text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
             >
@@ -603,7 +576,7 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
                 </>
               ) : '💾 Save & Generate Pay Slip PDF'}
             </button>
-            <p className="text-center text-gray-600 text-xs mt-3">Print dialog मध्ये "Save as PDF" निवडा</p>
+            <p className="text-center text-gray-600 text-xs mt-3">Select "Save as PDF" in the print dialog</p>
           </div>
 
         </div>
@@ -611,4 +584,4 @@ All values monthly INR integers. Sum = ${Math.round(parseFloat(form.annualGross)
     </div>
   )
 }
- 
+

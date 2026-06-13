@@ -1,4 +1,5 @@
 
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
@@ -9,12 +10,20 @@ import models.company
 import models.documents
 import models.user_company
 import models.offer_letter
-import models.PaySlip_SoftGrid     # ✅ exact file name
+import models.PaySlip_SoftGrid
+import models.employee        
+import models.notification     
 
 # Routers import
-from routers import auth, companies, letters, admin, offer_letter_router as offer_letter ,PaySlip_SoftGrid
-from routers import PaySlip_SoftGrid    # ✅ exact file name
-from routers.PaySlip_SoftGrid import router as payslip_router
+from routers import auth, companies, letters, admin
+from routers import offer_letter_router as offer_letter
+from routers import PaySlip_SoftGrid
+from routers import AppraisalLetter_Softgrid
+from routers import notifications
+from routers import employees      
+from routers import forgot_password
+
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="HR Docs API", version="2.0.0")
@@ -31,10 +40,15 @@ app.include_router(auth.router)
 app.include_router(companies.router)
 app.include_router(letters.router)
 app.include_router(PaySlip_SoftGrid.router)
+app.include_router(AppraisalLetter_Softgrid.router)
 app.include_router(admin.router)
 app.include_router(offer_letter.router)
-app.include_router(payslip_router)                 
+app.include_router(notifications.router)
+app.include_router(employees.router) 
+app.include_router(forgot_password.router)
+
 
 @app.get("/")
 def root():
+
     return {"message": "HR Docs API v2 is running ✅"}

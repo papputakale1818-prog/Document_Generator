@@ -491,3 +491,4 @@ ${additionalTermsHTML}
     </div>
   )
 }
+

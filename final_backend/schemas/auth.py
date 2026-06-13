@@ -21,3 +21,8 @@ class TokenSchema(BaseModel):
     access_token: str
     token_type:   str = "bearer"
     user:         UserInfo
+
+class ChangePasswordRequest(BaseModel):
+    email:        str
+    old_password: str
+    new_password: str
