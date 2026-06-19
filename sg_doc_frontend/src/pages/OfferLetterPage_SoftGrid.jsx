@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import OfferLetterPDFViewer from '../components/Offerletterpdfviewer'
@@ -114,8 +113,9 @@ export default function OfferLetterPage_SoftGrid() {
   const otherAllow  = monthly > 0 ? (monthly - basicFinal - da - hra - conv - med) : 0
   const grossM      = monthly
   const grossY      = annual
-  const pfEmpM      = form.withPF ? Math.round((basicFinal + da) * Number(form.pfRate) / 100) : 0
-  const pfEmrM      = form.withPF ? Math.round((basicFinal + da) * Number(form.pfEmrRate) / 100) : 0
+  const pfWage      = basicFinal + da
+  const pfEmpM      = form.withPF ? (pfWage > 21000 ? 1800 : Math.round(pfWage * Number(form.pfRate) / 100)) : 0
+  const pfEmrM      = form.withPF ? Math.round(pfWage * Number(form.pfEmrRate) / 100) : 0
   const pt          = monthly > 0 ? 200 : 0
   const netM        = monthly - pfEmpM - pt
   const netY        = netM * 12

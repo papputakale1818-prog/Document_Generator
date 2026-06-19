@@ -1,5 +1,6 @@
 
 
+
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime
@@ -7,16 +8,18 @@ from datetime import date, datetime
 
 class AppraisalLetterCreate(BaseModel):
     emp_id: Optional[str] = None
-    employee_name: Optional[str] = None
     designation: Optional[str] = None
     old_ctc: Optional[float] = None
     new_ctc: Optional[float] = None
+    old_monthly_gross: Optional[float] = None
+    new_monthly_gross: Optional[float] = None
     effective_date: Optional[date] = None
     company_id: Optional[int] = None
 
 
 class AppraisalLetterOut(AppraisalLetterCreate):
     id: int
+    employee_name: Optional[str] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
     company_name: Optional[str] = None

@@ -5,6 +5,8 @@ from typing import Optional
 from database import get_db
 from routers.deps import get_current_user
 from models.documents import AppraisalLetter
+from models.offer_letter import OfferLetter
+from models.employee import Employee
 from models.user import User
 from models.company import Company
 from schemas import AppraisalLetter_Softgrid_schemas as schemas
@@ -31,6 +33,14 @@ def create_appraisal_letter(
         created_by=current_user.id,
     )
     db.add(record)
+
+    # ── Sync new monthly gross into OfferLetter table ──
+    if payload.new_monthly_gross:
+        offer = db.query(OfferLetter).filter(OfferLetter.emp_id == payload.emp_id).first()
+        if offer:
+            offer.monthly_gross = payload.new_monthly_gross
+            offer.annual_gross  = payload.new_monthly_gross * 12
+
     db.commit()
     db.refresh(record)
     return _attach_extra(record, db)
@@ -96,6 +106,13 @@ def _attach_extra(record: AppraisalLetter, db: Session):
         if company:
             company_name = company.name
 
+    employee_name = None
+    if getattr(record, "emp_id", None):
+        emp = db.query(Employee).filter(Employee.emp_id == record.emp_id).first()
+        if emp:
+            employee_name = emp.full_name
+
     record.created_by_name = creator_name
     record.company_name = company_name
+    record.employee_name = employee_name
     return record

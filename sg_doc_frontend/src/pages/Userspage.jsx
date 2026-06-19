@@ -828,7 +828,7 @@ export default function UsersPage() {
                   <label className={lbl}>Full Name <span className="text-red-400">*</span></label>
                   <input name="name" value={addForm.name} required
                     onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g. Rajendra Takale" className={inp} />
+                    placeholder="e.g. Harshal karande " className={inp} />
                 </div>
                 <div>
                   <label className={lbl}>Email <span className="text-red-400">*</span></label>

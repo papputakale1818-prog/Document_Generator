@@ -1,4 +1,5 @@
-import { BG_PAGES } from '../assets/bg_images'
+// import { BG_PAGES } from '../assets/bg_images'
+import OfferLetterTemplate from '../assets/OfferLetterTemplate.png'
 import logoImg from '../assets/PHOTO-2025-09-04-19-02-03.jpg'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,22 +61,26 @@ export async function openPaySlipPDF(ps) {
         const autoConv    = monthly > 0 ? 1600 : 0
         const autoMed     = monthly > 0 ? 1250 : 0
         const autoSpecial = monthly - autoBasic - autoDa - autoHra - autoConv - autoMed
-        const pfEmpM      = Math.round((autoBasic + autoDa) * 0.12)
+        // Company rule: Monthly Gross > ₹21,000 असेल tar PF fixed ₹1,800 (cap), nahitar normal 12% calculation
+        const pfEmpM      = monthly > 21000 ? 1800 : Math.round((autoBasic + autoDa) * 0.12)
         const pt          = monthly > 0 ? 200 : 0
         const totalDed    = pfEmpM + pt
+        // keep(): form/Deductions & Settings ne adhich pathवlela value (0 dharun) override karaycha nahi —
+        // fakt khara undefined/null/'' asel tarच offer-letter cha auto-calc fallback म्हणून vapraycha
+        const keep = (v, fallback) => (v !== undefined && v !== null && v !== '') ? v : fallback
         ps = {
           ...ps,
-          monthly_gross:   ps.monthly_gross   || monthly,
-          net_salary:      ps.net_salary      || empLetter.net_monthly || 0,
-          basic:           ps.basic           || autoBasic,
-          da:              ps.da              || autoDa,
-          hra:             ps.hra             || autoHra,
-          conveyance:      ps.conveyance      || autoConv,
-          medical:         ps.medical         || autoMed,
-          special:         ps.special         || autoSpecial,
-          pf_employee:     ps.pf_employee     || pfEmpM,
-          prof_tax:        ps.prof_tax        || pt,
-          total_deduction: ps.total_deduction || totalDed,
+          monthly_gross:   keep(ps.monthly_gross, monthly),
+          net_salary:      keep(ps.net_salary, empLetter.net_monthly || 0),
+          basic:           keep(ps.basic, autoBasic),
+          da:              keep(ps.da, autoDa),
+          hra:             keep(ps.hra, autoHra),
+          conveyance:      keep(ps.conveyance, autoConv),
+          medical:         keep(ps.medical, autoMed),
+          special:         keep(ps.special, autoSpecial),
+          pf_employee:     keep(ps.pf_employee, pfEmpM),
+          prof_tax:        keep(ps.prof_tax, pt),
+          total_deduction: keep(ps.total_deduction, totalDed),
         }
       }
     }
@@ -97,7 +102,6 @@ export async function openPaySlipPDF(ps) {
     { label: "Other Deduction",      val: ps.other_deduction || 0 },
     { label: "TDS",                  val: ps.tds             || 0 },
   ]
-
   const maxR = Math.max(earnRows.length, dedRows.length)
   const tableRowsHTML = Array.from({ length: maxR }, (_, i) => {
     const e = earnRows[i]
@@ -192,7 +196,7 @@ export async function openPaySlipPDF(ps) {
   .words { margin-top:12px;font-size:12px;line-height:2 }
   .words div { display:flex;gap:4px }
   .words .wlbl { font-weight:normal;min-width:190px }
-  .note { margin-top:24px;font-size:11px;color:#444 }
+  .note { position:absolute;bottom:35mm;left:18mm;right:18mm;font-size:11px;color:#444 }
   #pbar { position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#1e293b,#0f172a);border-top:2px solid #6366f1;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;z-index:9999;font-family:'Segoe UI',sans-serif }
 </style></head><body>
 
@@ -255,8 +259,8 @@ export async function openPaySlipPDF(ps) {
   </table>
 
   <div class="words">
-    <div><span class="wlbl">Total Amount in words:</span><span>Rupees ${grossWords} Only.</span></div>
-    <div><span class="wlbl">In Hand Salary words:</span><span>Rupees ${inHandWords} Only.</span></div>
+    <div><span class="wlbl">Total Amount In Words:</span><span>Rupees ${grossWords} Only.</span></div>
+    <div><span class="wlbl">In Hand Salary In Words:</span><span>Rupees ${inHandWords} Only.</span></div>
   </div>
 
   <div class="note">Note: This is a computer-generated slip, signature is not required.</div>

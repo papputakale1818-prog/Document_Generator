@@ -33,8 +33,8 @@ class RelievingCreate(BaseModel):
     designation:      str
     last_working_day: date
 
-class ExperienceCreate(BaseModel):
-    employee_name: str
-    designation:   str
-    from_date:     date
-    to_date:       date
+# class ExperienceCreate(BaseModel):
+#     employee_name: str
+#     designation:   str
+#     from_date:     date
+#     to_date:       date

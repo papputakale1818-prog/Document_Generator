@@ -1,5 +1,6 @@
-import { BG_PAGES } from '../assets/bg_images'
+import OfferLetterTemplate from '../assets/OfferLetterTemplate.png'
 import stampimage from '../assets/stamp.jpg'
+import stampimage2 from '../assets/stamp2.jpg'
 
 const CO = {
   fullName:      'SoftGrid Info Pvt. Ltd.',
@@ -16,7 +17,7 @@ const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine",
 const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"]
 function hw(n) { if(n<20) return ones[n]; if(n<100) return tens[Math.floor(n/10)]+(n%10?" "+ones[n%10]:""); return ones[Math.floor(n/100)]+" Hundred"+(n%100?" "+hw(n%100):"") }
 function toWords(n) { n=Math.round(n); if(!n) return "Zero"; const cr=Math.floor(n/10000000),lk=Math.floor((n%10000000)/100000),th=Math.floor((n%100000)/1000),rest=n%1000; let r=""; if(cr) r+=hw(cr)+" Crore "; if(lk) r+=hw(lk)+" Lakh "; if(th) r+=hw(th)+" Thousand "; if(rest) r+=hw(rest); return r.trim() }
-function fmtNum(n) { if(!n||isNaN(n)) return "0"; return Math.round(n).toLocaleString("en-IN") }
+function fmtNum(n) { if(!n||isNaN(n)) return "0.00"; return Math.round(n).toLocaleString("en-IN") + ".00" }
 function ordinalDate(d) {
   if(!d) return "—"
   const dt = new Date(d)
@@ -25,7 +26,7 @@ function ordinalDate(d) {
   return day + suffix + " " + dt.toLocaleDateString("en-IN",{month:"long",year:"numeric"})
 }
 
-function calcSalary(monthly) {
+function calcSalary(monthly, withPF = true, pfRate = 12, pfEmrRate = 13) {
   const m = parseFloat(monthly) || 0
   const a = m * 12
   const basic      = Math.round(m * 0.40)
@@ -34,11 +35,14 @@ function calcSalary(monthly) {
   const conv       = m > 0 ? 1600 : 0
   const med        = m > 0 ? 1250 : 0
   const special    = m - basic - da - hra - conv - med
-  const pf         = Math.round((basic + da) * 0.12)
-  const ctcMonthly = m + Math.round((basic + da) * 0.13)
+  const pfCapped   = withPF && m > 21000
+  const pf         = withPF ? (pfCapped ? 1800 : Math.round((basic + da) * (Number(pfRate) || 0) / 100)) : 0
+  const pfEmr      = withPF ? (pfCapped ? 1800 : Math.round((basic + da) * (Number(pfEmrRate) || 0) / 100)) : 0
+  const ctcMonthly = m + pfEmr
   return {
     basic: basic*12, da: da*12, hra: hra*12, conv: conv*12, med: med*12,
-    special: special*12, pf: pf*12, gross: a, ctc: ctcMonthly*12, monthly: m,
+    special: special*12, pf: pf*12, pfEmr: pfEmr*12, gross: a, ctc: ctcMonthly*12, monthly: m,
+    withPF,
   }
 }
 
@@ -49,31 +53,39 @@ const ROWS = [
   { label: 'Conveyance allowances',   key: 'conv'    },
   { label: 'Medical allowances',      key: 'med'     },
   { label: 'Special Allowances',      key: 'special' },
-  { label: "Co.'s Contribution to PF", key: 'pf'    },
+  { label: "Co.'s Contribution to PF", key: 'pfEmr' },
 ]
 
 // ── Builds the full printable HTML for the Salary Appraisal letter ─────────
 export function buildAppraisalHTML(form) {
-  const nw = calcSalary(form.newMonthly)
+  const nw = calcSalary(form.newMonthly, form.withPF, form.pfRate, form.pfEmrRate)
 
   const bgStyle =
-    "background-image:url('" + BG_PAGES[0] + "');" +
+    "background-image:url('" + OfferLetterTemplate + "');" +
     "background-size:100% 100%;" +
     "background-repeat:no-repeat;" +
     "background-position:center center;"
 
   const cellBase = "padding:4px 8px;border:1px solid #000;font-size:10pt;font-family:Calibri,Arial,sans-serif;vertical-align:middle;"
 
-  const rowsHTML = ROWS.map(r =>
-    '<tr>' +
-      '<td style="' + cellBase + 'color:#333;width:60%">' + r.label + '</td>' +
-      '<td style="' + cellBase + 'text-align:right;color:#333;width:40%">' + fmtNum(nw[r.key]) + '</td>' +
-    '</tr>'
-  ).join('')
+  const rowsHTML = ROWS.map(r => {
+    const isPFRow = r.key === 'pfEmr'
+    const valueText = (isPFRow && !nw.withPF) ? 'Not Applicable' : fmtNum(nw[r.key])
+    return (
+      '<tr>' +
+        '<td style="' + cellBase + 'color:#333;width:60%">' + r.label + '</td>' +
+        '<td style="' + cellBase + 'text-align:right;padding-right:18%;color:#333;width:40%">' + valueText + '</td>' +
+      '</tr>'
+    )
+  }).join('')
 
   const stampHTML = stampimage
     ? '<img src="' + stampimage + '" style="height:70px;object-fit:contain" alt="Stamp" />'
     : '<div style="width:70px;height:70px;border:2px solid ' + CO.themeColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:' + CO.themeColor + ';text-align:center">SOFTGRID<br>PUNE</div>'
+
+  const stampHTML2 = stampimage2
+    ? '<img src="' + stampimage2 + '" style="height:70px;object-fit:contain" alt="Stamp" />'
+    : ''
 
   return (
     '<!DOCTYPE html><html><head>' +
@@ -137,8 +149,8 @@ export function buildAppraisalHTML(form) {
       '<table style="margin:4mm auto">' +
         '<thead>' +
           '<tr>' +
-            '<th style="background:#fff;font-size:10pt;padding:4px 8px;border:1px solid #000;text-align:left;font-weight:400">Name</th>' +
-            '<th style="background:#fff;font-size:10pt;padding:4px 8px;border:1px solid #000;text-align:left;font-weight:400">' + (form.empName || '[Employee Name]') + '</th>' +
+            '<th style="background:#fff;font-size:10pt;padding:4px 8px;border:1px solid #000;text-align:left;font-weight:700">Name</th>' +
+            '<th style="background:#fff;font-size:10pt;padding:4px 8px;border:1px solid #000;text-align:left;font-weight:700">' + (form.empName || '[Employee Name]') + '</th>' +
           '</tr>' +
           '<tr>' +
             '<th style="background:#fff;font-size:10pt;padding:4px 8px;border:1px solid #000;text-align:left;font-weight:400">Designation</th>' +
@@ -153,7 +165,7 @@ export function buildAppraisalHTML(form) {
         '<tfoot>' +
           '<tr>' +
             '<td style="background:#fff;font-weight:700;font-size:10pt;color:#1a1a1a;padding:4px 8px;border:1px solid #000">Cost to Company (CTC)</td>' +
-            '<td style="background:#fff;font-weight:700;font-size:10pt;color:#1a1a1a;padding:4px 8px;border:1px solid #000;text-align:right">' + fmtNum(nw.ctc) + '</td>' +
+            '<td style="background:#fff;font-weight:700;font-size:10pt;color:#1a1a1a;padding:4px 8px;border:1px solid #000;text-align:right;padding-right:18%">' + fmtNum(nw.ctc) + '</td>' +
           '</tr>' +
         '</tfoot>' +
       '</table>' +
@@ -164,10 +176,8 @@ export function buildAppraisalHTML(form) {
       '<div style="margin-top:4mm">' +
         '<p style="font-size:11pt;font-weight:700;margin-bottom:1mm">For: ' + CO.fullNameUpper + '</p>' +
         '<div style="display:flex;align-items:flex-end;margin-top:3mm;position:relative;min-height:80px">' +
-          '<div style="margin-left:15mm">' +
-            '<div style="font-size:10pt;color:#333;font-family:Calibri,Arial,sans-serif">' +
-              'Authorised Signatory<br><strong>DIRECTOR</strong>' +
-            '</div>' +
+          '<div style="margin-left:0mm">' +
+            stampHTML2 +
           '</div>' +
           '<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:0">' + stampHTML + '</div>' +
         '</div>' +
