@@ -374,7 +374,9 @@ function buildOfferLetterHTML(letter) {
   const pfEmrRate = letter.pf_emr_rate   || 13
   const pfWage    = basic + da
   const pfEmpM    = letter.pf_employee ? (pfWage > 21000 ? 1800 : Math.round(pfWage * pfRate / 100)) : 0
-  const pfEmrM    = letter.pf_employer ? Math.round(pfWage * pfEmrRate / 100) : 0
+  // ✅ Fix: withPFEmr OFF असेल तर pfEmrM = 0 (pf_employer true असला तरी)
+  const pfEmrOn   = letter.pf_employer && (letter.withPFEmr !== false)
+  const pfEmrM    = pfEmrOn ? Math.round(pfWage * pfEmrRate / 100) : 0
   const pt        = monthly > 0 ? 200 : 0
   const ctcM      = monthly + pfEmrM
 
@@ -419,7 +421,7 @@ function buildOfferLetterHTML(letter) {
     { label:'Professional Tax (Employee Deduction)',                  naNote:null,                                 m:pt,                            y:pt*12,            type:'deduct' },
     { label:'TDS (Depends on IT Slabs & Exemptions/Loan Recovery)',   naNote:null,                                 m:null,                          y:null,             type:'na'     },
     { label:'Net Salary',                                             naNote:null,                                 m:netM,                          y:netM*12,          type:'net'    },
-    { label:'Provident Fund (Employer Contribution)',                 naNote:letter.pf_employer?null:'Not Applicable*', m:letter.pf_employer?pfEmrM:null, y:letter.pf_employer?pfEmrM*12:null, type:'employer'},
+    { label:'Provident Fund (Employer Contribution)',                 naNote:pfEmrOn?null:'Not Applicable*', m:pfEmrOn?pfEmrM:null, y:pfEmrOn?pfEmrM*12:null, type:'employer'},
     { label:'ESIC (Employer Contribution)',                           naNote:null,                                 m:null,                          y:null,             type:'na'     },
     { label:'Gratuity (Employer Contribution)',                       naNote:null,                                 m:null,                          y:null,             type:'na'     },
     { label:'Bonus (Employer Contribution)',                          naNote:null,                                 m:null,                          y:null,             type:'na'     },

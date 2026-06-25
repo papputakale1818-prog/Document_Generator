@@ -40,7 +40,7 @@ function NotificationModal({ onClose, token }) {
     try {
       await fetch(`${API_URL}/notifications/${id}/${action}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } })
       await fetchNotifications()
-    } catch { alert('काहीतरी चुकलं, पुन्हा try करा') }
+    } catch { alert('Something went wrong, please try again') }
     finally   { setActionId(null) }
   }
 
@@ -85,7 +85,7 @@ function NotificationModal({ onClose, token }) {
           {!loading && notifications.length === 0 && (
             <div className="text-center py-16 text-gray-500">
               <div className="text-4xl mb-3">🔔</div>
-              <p className="text-sm">कोणत्याही notifications नाहीत</p>
+              <p className="text-sm">No notifications</p>
             </div>
           )}
           {!loading && pending.length > 0 && (
@@ -171,7 +171,7 @@ export default function CompaniesPage() {
           bgImage:  BG_MAP[co.id] || undefined,
         }))
         setCompanies(enriched)
-      } catch { setError('Companies load करता आल्या नाहीत') }
+      } catch { setError('Failed to load companies') }
       finally   { setLoading(false) }
     }
     fetchCompanies()
@@ -247,7 +247,7 @@ export default function CompaniesPage() {
               </>
             )}
 
-            {/* ✅ Shared ProfileDropdown — import केलेला */}
+            {/* ✅ Shared ProfileDropdown — imported */}
             <ProfileDropdown />
           </div>
         </div>
@@ -267,7 +267,7 @@ export default function CompaniesPage() {
           <div className="text-center py-24">
             <div className="text-6xl mb-4">🏢</div>
             <h3 className="text-xl font-semibold text-white mb-2">No Companies Assigned</h3>
-            <p className="text-gray-400 text-sm">Admin ने अजून कोणती company assign केली नाही.</p>
+            <p className="text-gray-400 text-sm">Admin has not assigned any company yet.</p>
           </div>
         )}
 

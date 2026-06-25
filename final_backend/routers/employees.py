@@ -278,6 +278,7 @@ from database import get_db
 from models.employee import Employee
 from models.offer_letter import OfferLetter
 from models.user import User
+from models.company import Company
 from routers.deps import get_current_user
 
 
@@ -287,6 +288,27 @@ router = APIRouter(prefix="/employees", tags=["Employees"])
 # ── 0. Last Emp ID — Auto Generate साठी ──────────────────────────────────────
 # Frontend हे call करतो: GET /employees/last-emp-id?company_id=1
 # Response: { "emp_id": "SGT1005" } किंवा { "emp_id": null }
+#
+# Logic:
+#   1) त्या company चा सगळ्यात नवीन (last) employee shodha (company_id filter).
+#   2) जर सापडला -> त्याच्याच emp_id मधून prefix + number काढून पुढचा generate
+#      करायचं काम frontend (AddEmployee.jsx मधलं fetchNextEmpId) आधीपासूनच करतो.
+#   3) जर company चा एकही employee नसेल (पहिलाच employee आहे) -> कुठल्याही
+#      existing emp_id वरून prefix काढता येत नाही, म्हणून खालच्या
+#      COMPANY_EMP_ID_PREFIX mapping मधून त्या company साठीचा ठरलेला prefix
+#      घेऊन "PREFIX000" असा seed पाठवतो — frontend तो +1 करून "PREFIX001"
+#      बनवतो.
+#
+# नवीन company add झाली की फक्त खालच्या dictionary मध्ये एक नवी ओळ टाका —
+# बाकी सगळी logic, सगळ्या companies साठी, तीच (generic) राहते.
+
+COMPANY_EMP_ID_PREFIX = {
+    "SoftGrid":                                "SG",
+    "UAS IT Consultancy Services Pvt. Ltd.":   "UAS",
+    "Iconsteam Technologies Pvt. Ltd.":        "ICT",
+    "CyberTrident Solutions Pvt. Ltd.":        "CTS",
+}
+
 
 @router.get("/last-emp-id")
 def get_last_emp_id(
@@ -300,7 +322,20 @@ def get_last_emp_id(
         .order_by(desc(Employee.id))
         .first()
     )
-    return {"emp_id": last.emp_id if last else None}
+
+    if last:
+        return {"emp_id": last.emp_id}
+
+    # कोणताही existing employee नाही (company चा पहिलाच employee) —
+    # company च्या नावावरून ठरलेला prefix शोधा
+    company = db.query(Company).filter(Company.id == company_id).first()
+    prefix  = COMPANY_EMP_ID_PREFIX.get(company.name) if company else None
+
+    if not prefix:
+        # mapping मध्ये prefix सापडला नाही — frontend ला कळवा की manual entry करा
+        return {"emp_id": None}
+
+    return {"emp_id": f"{prefix}000"}
 
 
 # ── 1. Company च्या सगळ्या employees GET ──────────────────────────────────────
@@ -407,11 +442,21 @@ def get_employee_by_emp_id(
 @router.get("/{emp_id}")
 def get_employee(
     emp_id      : str,
+    company_id  : Optional[int] = None,
     db          : Session = Depends(get_db),
     current_user: User    = Depends(get_current_user),
 ):
-    e = db.query(Employee).filter(Employee.emp_id == emp_id).first()
+    query = db.query(Employee).filter(Employee.emp_id == emp_id)
+    if company_id is not None:
+        query = query.filter(Employee.company_id == company_id)
+    e = query.first()
     if not e:
+        # company_id दिला होता पण match सापडला नाही -> ही ID त्या company ची नाहीये
+        if company_id is not None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Employee ID \"{emp_id}\" your company madhe sapadli nahi",
+            )
         raise HTTPException(status_code=404, detail="Employee not found")
 
     return {

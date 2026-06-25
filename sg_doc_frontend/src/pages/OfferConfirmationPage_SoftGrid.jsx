@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { useAuth } from '../context/AuthContext'
 import { openConfirmationPDF } from '../components/ConfirmationLetterPDFViewer_Softgrid'
+import EmployeeIdLookup from '../components/EmployeeIdLookup'
 
 const CO = {
   fullName: 'SoftGrid Info Pvt. Ltd.',
@@ -17,47 +18,14 @@ export default function ConfirmationLetterPage_SoftGrid() {
     joiningDate: '',
     letterDate: new Date().toISOString().split('T')[0],
   })
-  const [fetching, setFetching] = useState(false)
-  const [fetchError, setFetchError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  const companyId = selectedCompany?.id || selectedCompany?.company_id
 
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
-    if (name === 'empId') setFetchError('')
-  }
-
-  const fetchEmployee = async () => {
-    const empId = form.empId.trim()
-    if (!empId) { setFetchError('Please enter Emp ID first'); return }
-    const companyId = selectedCompany?.id || selectedCompany?.company_id
-    setFetching(true)
-    setFetchError('')
-    try {
-      const token = localStorage.getItem('hr_token')
-      const res = await fetch(
-        `http://127.0.0.1:8000/employees/by-emp-id?emp_id=${encodeURIComponent(empId)}&company_id=${companyId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setFetchError(err.detail || 'Employee not found')
-        return
-      }
-      const data = await res.json()
-
-      setForm(prev => ({
-        ...prev,
-        fullName:    data.full_name   || data.name     || prev.fullName,
-        designation: data.designation || data.position || prev.designation,
-        joiningDate: data.joining_date || prev.joiningDate,
-      }))
-    } catch {
-      setFetchError('Could not connect to server')
-    } finally {
-      setFetching(false)
-    }
   }
 
   const inp = "w-full mt-1 px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-green-500 outline-none text-white text-sm transition-colors"
@@ -114,25 +82,29 @@ export default function ConfirmationLetterPage_SoftGrid() {
             <div className="space-y-4">
 
               <div>
-                <label className={lbl}>Employee ID</label>
-                <div className="flex gap-2 mt-1">
-                  <input
-                    name="empId"
-                    value={form.empId}
-                    onChange={handleChange}
-                    onKeyDown={e => e.key === 'Enter' && fetchEmployee()}
-                    placeholder="e.g. SGT1005"
-                    className="flex-1 px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-green-500 outline-none text-white text-sm transition-colors"
-                  />
-                  <button
-                    onClick={fetchEmployee}
-                    disabled={fetching}
-                    className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors whitespace-nowrap"
-                  >
-                    {fetching ? '...' : '🔍 Fetch'}
-                  </button>
-                </div>
-                {fetchError && <p className="text-red-400 text-xs mt-1">{fetchError}</p>}
+                <EmployeeIdLookup
+                  companyId={companyId}
+                  companyName={selectedCompany?.name || 'this company'}
+                  placeholder="e.g. SGT1005"
+                  required={false}
+                  errorPrefix=""
+                  doubleCheckCompany={false}
+                  buildUrl={(id, cId) =>
+                    `http://127.0.0.1:8000/employees/by-emp-id?emp_id=${encodeURIComponent(id)}&company_id=${cId}`
+                  }
+                  parseServerError={(body) => body.detail || 'Employee not found'}
+                  inputClassName="px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-green-500 outline-none text-white text-sm transition-colors"
+                  labelClassName={lbl}
+                  onEmpIdChange={(id) => setForm(prev => ({ ...prev, empId: id }))}
+                  onFound={(data) => {
+                    setForm(prev => ({
+                      ...prev,
+                      fullName:    data.full_name    || data.name     || prev.fullName,
+                      designation: data.designation  || data.position || prev.designation,
+                      joiningDate: data.joining_date || prev.joiningDate,
+                    }))
+                  }}
+                />
               </div>
 
               <div>

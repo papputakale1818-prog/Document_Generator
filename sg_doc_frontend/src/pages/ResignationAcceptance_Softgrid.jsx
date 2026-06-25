@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useResignationAcceptancePDF } from '../components/Resignation_Acceptance_LetterPDFViewer_softgrid'
+import EmployeeIdLookup from '../components/EmployeeIdLookup'
 
 export default function ResignationAcceptance_SoftGrid() {
   const { user, selectedCompany } = useAuth()
@@ -14,10 +15,6 @@ export default function ResignationAcceptance_SoftGrid() {
     letterDate:       '',   // date of this acceptance letter
   })
 
-  // empName & designation come only from backend fetch — not editable manually
-
-  const [fetchStatus, setFetchStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
-  const [fetchError,  setFetchError]  = useState('')
   const [saveStatus,  setSaveStatus]  = useState('idle') // 'idle' | 'saving' | 'success' | 'error'
   const [saveError,   setSaveError]   = useState('')
 
@@ -26,51 +23,21 @@ export default function ResignationAcceptance_SoftGrid() {
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
-  // ── Fetch employee data from backend using Emp ID ─────────────────────────
-  const fetchEmployee = useCallback(async () => {
-    if (!form.empId.trim()) {
-      setFetchError('Please enter an Employee ID first.')
-      setFetchStatus('error')
-      return
-    }
-    setFetchStatus('loading')
-    setFetchError('')
-    try {
-      const res = await fetch(
-        `http://127.0.0.1:8000/api/relieving-letters/${encodeURIComponent(form.empId.trim())}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${user?.token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-      if (!res.ok) {
-        const msg = res.status === 404
-          ? 'Employee not found in relieving letter records.'
-          : `Server error (${res.status}).`
-        throw new Error(msg)
-      }
-      const data = await res.json()
-
-      // Backend snake_case → Frontend camelCase (fetched from Relieving Letters table)
-      setForm(prev => ({
-        ...prev,
-        empName:         data.emp_name          ?? prev.empName,
-        designation:     data.designation        ?? prev.designation,
-        resignationDate: data.resignation_date   ?? prev.resignationDate,
-        lastWorkingDate: data.relieving_date     ?? prev.lastWorkingDate,
-        letterDate:      data.letter_date         ?? prev.letterDate,
-      }))
-      setFetchStatus('success')
-    } catch (err) {
-      setFetchError(err.message || 'Failed to fetch employee data.')
-      setFetchStatus('error')
-    }
-  }, [form.empId, user?.token])
+  // Called by EmployeeIdLookup after a successful employee fetch
+  const handleEmployeeFound = (emp) => {
+    setForm(prev => ({
+      ...prev,
+      empName:         emp.full_name        || emp.name        || emp.emp_name  || prev.empName,
+      designation:     emp.designation      || emp.position    || prev.designation,
+      // pre-fill dates if backend returns them
+      resignationDate: emp.resignation_date ?? prev.resignationDate,
+      lastWorkingDate: emp.relieving_date   ?? emp.last_working_date ?? prev.lastWorkingDate,
+      letterDate:      emp.letter_date      ?? prev.letterDate,
+    }))
+  }
 
   // ── Save resignation acceptance to DB (POST, fallback to PATCH if exists) ─
-  const saveToDB = useCallback(async () => {
+  const saveToDB = async () => {
     if (!form.empId.trim()) {
       setSaveError('Employee ID is required to save.')
       setSaveStatus('error')
@@ -127,7 +94,7 @@ export default function ResignationAcceptance_SoftGrid() {
       setSaveStatus('error')
       return false
     }
-  }, [form, user?.token])
+  }
 
   // ── PDF generation (from Resignation_Acceptance_LetterPDFViewer_softgrid) ──
   const { exportPDF } = useResignationAcceptancePDF(form)
@@ -149,41 +116,18 @@ export default function ResignationAcceptance_SoftGrid() {
             <h2 className="text-base font-semibold text-indigo-400 mb-5">👤 Employee Information</h2>
             <div className="space-y-4">
 
-              {/* Emp ID + Fetch button */}
-              <div>
-                <label className={lbl}>Employee ID</label>
-                <div className="flex gap-2 mt-1">
-                  <input
-                    name="empId"
-                    value={form.empId}
-                    onChange={(e) => {
-                      handleChange(e)
-                      setFetchStatus('idle')
-                      setFetchError('')
-                    }}
-                    placeholder="e.g. SG01257"
-                    className="flex-1 px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-green-500 outline-none text-white text-sm transition-colors"
-                  />
-                  <button
-                    onClick={fetchEmployee}
-                    disabled={fetchStatus === 'loading'}
-                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors whitespace-nowrap"
-                  >
-                    {fetchStatus === 'loading' ? '⏳ Fetching…' : '🔍 Fetch Details'}
-                  </button>
-                </div>
-
-                {/* Status messages */}
-                {fetchStatus === 'success' && (
-                  <p className="mt-1 text-xs text-green-400">✅ Employee data loaded successfully.</p>
-                )}
-                {fetchStatus === 'error' && (
-                  <p className="mt-1 text-xs text-red-400">❌ {fetchError}</p>
-                )}
-              </div>
+              {/* Emp ID lookup — auto-fills name, designation, and dates if available */}
+              <EmployeeIdLookup
+                companyId={selectedCompany?.id || selectedCompany?.company_id}
+                companyName={selectedCompany?.name || selectedCompany?.company_name || 'this company'}
+                onFound={handleEmployeeFound}
+                onEmpIdChange={(id) => setForm(prev => ({ ...prev, empId: id }))}
+                placeholder="e.g. SG01257"
+                inputClassName="w-full mt-1 px-4 py-2 rounded-lg bg-transparent border border-gray-600 focus:border-green-500 outline-none text-white text-sm transition-colors"
+              />
 
               {/* Fetched info display (read-only) */}
-              {fetchStatus === 'success' && form.empName && (
+              {form.empName && (
                 <div className="mt-2 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 space-y-1">
                   <p>Name: <strong className="text-white">{form.empName}</strong></p>
                   {form.designation && <p>Designation: <strong className="text-white">{form.designation}</strong></p>}

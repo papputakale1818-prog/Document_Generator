@@ -1,3 +1,4 @@
+
 // import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 // import { AuthProvider, useAuth } from './context/AuthContext'
 // import LoginPage from './pages/LoginPage'
@@ -6,7 +7,9 @@
 // import DashboardPage from './pages/DashboardPage'
 // import UsersPage from './pages/UsersPage'
 // import AdminPage from './pages/AdminPage'
-// import ExperienceLetterPage from './pages/ExperienceLetter_SoftGrid'
+// import ExperienceLetterPage_SoftGrid from './pages/ExperienceLetter_SoftGrid'
+// import ExperienceLetterPage_UASIT    from './pages/ExperienceLetter_UASIT'
+// import ResignationAcceptance_SoftGrid from './pages/ResignationAcceptance_SoftGrid'
 // import MyDocuments from './pages/MyDocuments'
 // import AddEmployee from './pages/AddEmployee'
 
@@ -80,6 +83,16 @@
 //   }
 // }
 
+// // ── Switcher — Experience Letter ──────────────────────────────────────────
+// function ExperienceLetterPage() {
+//   const { selectedCompany } = useAuth()
+//   switch (selectedCompany?.id) {
+//     case 1:  return <ExperienceLetterPage_SoftGrid />
+//     case 2:  return <ExperienceLetterPage_UASIT />
+//     default: return <ExperienceLetterPage_SoftGrid />
+//   }
+// }
+
 // // ── 🔐 Protected Route ────────────────────────────────────────────────────
 // function ProtectedRoute({ children }) {
 //   const { user } = useAuth()
@@ -136,6 +149,7 @@
 //         <Route path="salary-appraisal"   element={<AppraisalPage />} />
 //         <Route path="relieving-letter"   element={<RelievingLetterPage />} />
 //         <Route path="experience-letter"  element={<ExperienceLetterPage />} />
+//         <Route path="resignation-acceptance" element={<ResignationAcceptance_SoftGrid />} />
 //       </Route>
 
 //       {/* Fallback */}
@@ -162,8 +176,10 @@ import CompaniesPage from './pages/CompaniesPage'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
 import AdminPage from './pages/AdminPage'
-import ExperienceLetterPage from './pages/ExperienceLetter_SoftGrid'
+import ExperienceLetterPage_SoftGrid from './pages/ExperienceLetter_SoftGrid'
+import ExperienceLetterPage_UASIT    from './pages/ExperienceLetter_UASIT'
 import ResignationAcceptance_SoftGrid from './pages/ResignationAcceptance_SoftGrid'
+import ResignationAcceptance_UASIT    from './pages/ResignationAcceptance_UASIT'
 import MyDocuments from './pages/MyDocuments'
 import AddEmployee from './pages/AddEmployee'
 
@@ -237,6 +253,26 @@ function RelievingLetterPage() {
   }
 }
 
+// ── Switcher — Experience Letter ──────────────────────────────────────────
+function ExperienceLetterPage() {
+  const { selectedCompany } = useAuth()
+  switch (selectedCompany?.id) {
+    case 1:  return <ExperienceLetterPage_SoftGrid />
+    case 2:  return <ExperienceLetterPage_UASIT />
+    default: return <ExperienceLetterPage_SoftGrid />
+  }
+}
+
+// ── Switcher — Resignation Acceptance ────────────────────────────────────
+function ResignationAcceptancePage() {
+  const { selectedCompany } = useAuth()
+  switch (selectedCompany?.id) {
+    case 1:  return <ResignationAcceptance_SoftGrid />
+    case 2:  return <ResignationAcceptance_UASIT />
+    default: return <ResignationAcceptance_SoftGrid />
+  }
+}
+
 // ── 🔐 Protected Route ────────────────────────────────────────────────────
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -293,7 +329,7 @@ function AppRoutes() {
         <Route path="salary-appraisal"   element={<AppraisalPage />} />
         <Route path="relieving-letter"   element={<RelievingLetterPage />} />
         <Route path="experience-letter"  element={<ExperienceLetterPage />} />
-        <Route path="resignation-acceptance" element={<ResignationAcceptance_SoftGrid />} />
+        <Route path="resignation-acceptance" element={<ResignationAcceptancePage />} />
       </Route>
 
       {/* Fallback */}
